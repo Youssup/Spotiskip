@@ -12,22 +12,28 @@ import (
 	"github.com/joho/godotenv"
 )
 
+var db *pgx.Conn
+
 func init() {
 	err := godotenv.Load()
 	if err != nil {
-		log.Fatal("Error loading .env file")
+		log.Fatal("error: Error loading .env file: ", err)
 	}
 }
 
 func main() {
 	r := gin.Default()
 
-	// test route
+	// Connect to the database
+	dbConnection()
+
+	// Test route
 	r.GET("/ping", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"message": "Pong!"})
 	})
 
-	dbConnection()
+	// Add a new song
+	r.POST("/addSong", addSong)
 
 	// Start the server on port 8080
 	port := os.Getenv("PORT")
@@ -39,26 +45,44 @@ func main() {
 }
 
 func dbConnection() {
-	databaseUser := os.Getenv("DATABASE_USER")
-	databasePassword := os.Getenv("DATABASE_PASSWORD")
-	databaseName := os.Getenv("DATABASE_NAME")
-	databaseHost := os.Getenv("DATABASE_HOST")
-	databasePort := os.Getenv("DATABASE_PORT")
+	databaseUser := os.Getenv("DBUSER")
+	databasePassword := os.Getenv("DBPASSWORD")
+	databaseName := os.Getenv("DBNAME")
+	databaseHost := os.Getenv("DBHOST")
+	databasePort := os.Getenv("DBPORT")
 
 	databaseURL := fmt.Sprintf("postgresql://%s:%s@%s:%s/%s", databaseUser, databasePassword, databaseHost, databasePort, databaseName)
 	conn, err := pgx.Connect(context.Background(), databaseURL)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Unable to connect to database: %v\n", err)
-		os.Exit(1)
+		log.Fatalf("error: Unable to connect to database: %v: ", err)
 	}
-	defer conn.Close(context.Background())
+	db = conn
+	fmt.Println("Connected to database successfully")
+}
 
-	var greeting string
-	err = conn.QueryRow(context.Background(), "select 'Hello, world!'").Scan(&greeting)
+// adds a new song to the database
+func addSong(c *gin.Context) {
+	var song struct {
+		SongID string `json:"song_id"`
+		Title  string `json:"title"`
+		Artist string `json:"artist"`
+	}
+
+	// Defines the structure of the json request to the song struct
+	if err := c.ShouldBindJSON(&song); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "error: Invalid request: " + err.Error()})
+		return
+	}
+
+	// Insert song into the database
+	_, err := db.Exec(context.Background(),
+		"INSERT INTO songs (song_id, title, artist) VALUES ($1, $2, $3)",
+		song.SongID, song.Title, song.Artist)
+
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "QueryRow failed: %v\n", err)
-		os.Exit(1)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "error: Failed to insert song: " + err.Error()})
+		return
 	}
 
-	fmt.Println(greeting)
+	c.JSON(http.StatusOK, gin.H{"message": "Song added successfully!"})
 }
