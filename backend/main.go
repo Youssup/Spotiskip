@@ -35,6 +35,9 @@ func main() {
 	// Add a new song
 	r.POST("/addSong", addSong)
 
+	// Get all songs
+	r.GET("/getSongs", getSongs)
+
 	// Start the server on port 8080
 	port := os.Getenv("PORT")
 	if port == "" {
@@ -85,4 +88,41 @@ func addSong(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"message": "Song added successfully!"})
+}
+
+// retrieves all songs from the database
+func getSongs(c *gin.Context) {
+	rows, err := db.Query(context.Background(), "SELECT song_id, title, artist FROM songs")
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "error: Failed to retrieve songs: " + err.Error()})
+		return
+	}
+	defer rows.Close()
+
+	var songs []struct {
+		SongID string `json:"song_id"`
+		Title  string `json:"title"`
+		Artist string `json:"artist"`
+	}
+
+	for rows.Next() {
+		var song struct {
+			SongID string `json:"song_id"`
+			Title  string `json:"title"`
+			Artist string `json:"artist"`
+		}
+		if err := rows.Scan(&song.SongID, &song.Title, &song.Artist); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "error: Failed to retrieve songs: " + err.Error()})
+			return
+		}
+		songs = append(songs, song)
+	}
+
+	// Check if there were any errors during the iteration
+	if err := rows.Err(); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "error: Failed to iterate over songs: " + err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"songs": songs})
 }
