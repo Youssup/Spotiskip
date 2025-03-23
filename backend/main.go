@@ -38,6 +38,9 @@ func main() {
 	// Get all songs
 	r.GET("/getSongs", getSongs)
 
+	// Delete a song by ID
+	r.DELETE("/deleteSong/:id", deleteSong)
+
 	// Start the server on port 8080
 	port := os.Getenv("PORT")
 	if port == "" {
@@ -63,7 +66,7 @@ func dbConnection() {
 	fmt.Println("Connected to database successfully")
 }
 
-// adds a new song to the database
+// Adds a new song to the database
 func addSong(c *gin.Context) {
 	var song struct {
 		SongID string `json:"song_id"`
@@ -90,7 +93,7 @@ func addSong(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "Song added successfully!"})
 }
 
-// retrieves all songs from the database
+// Retrieves all songs from the database
 func getSongs(c *gin.Context) {
 	rows, err := db.Query(context.Background(), "SELECT song_id, title, artist FROM songs")
 	if err != nil {
@@ -124,5 +127,22 @@ func getSongs(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"songs": songs})
+	c.JSON(http.StatusOK, gin.H{
+		"message": "Songs retrieved successfully!",
+		"songs":   songs})
+}
+
+// Delete a song by ID
+func deleteSong(c *gin.Context) {
+	songID := c.Param("id")
+
+	_, err := db.Exec(context.Background(),
+		"DELETE FROM songs WHERE song_id = $1", songID)
+
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "error: Failed to delete song: " + err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "Song deleted successfully!"})
 }
