@@ -38,6 +38,9 @@ func main() {
 	// Get all songs
 	r.GET("/getSongs", getSongs)
 
+	// Update a song by ID
+	r.PUT("/updateSong/:id", updateSong)
+
 	// Delete a song by ID
 	r.DELETE("/deleteSong/:id", deleteSong)
 
@@ -145,4 +148,30 @@ func deleteSong(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"message": "Song deleted successfully!"})
+}
+
+// Update a song
+func updateSong(c *gin.Context) {
+	songID := c.Param("id")
+
+	var song struct {
+		Title  string `json:"title"`
+		Artist string `json:"artist"`
+	}
+
+	if err := c.ShouldBindJSON(&song); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "error: Invalid request: " + err.Error()})
+		return
+	}
+
+	_, err := db.Exec(context.Background(),
+		"UPDATE songs SET title = $1, artist = $2 WHERE song_id = $3",
+		song.Title, song.Artist, songID)
+
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "error: Failed to update song: " + err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "Song updated successfully!"})
 }
