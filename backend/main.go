@@ -38,6 +38,9 @@ func main() {
 	// Add skipped sections to a song
 	r.POST("/addSkippedSections", addSkippedSections)
 
+	// Get song by ID
+	r.GET("/getSong/:id", getSong)
+
 	// Get all songs
 	r.GET("/getSongs", getSongs)
 
@@ -140,6 +143,30 @@ func addSong(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"message": "Song added successfully!"})
+}
+
+// Retrieves one song from the database
+func getSong(c *gin.Context) {
+	songID := c.Param("id")
+	if songID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "error: Invalid song ID"})
+		return
+	}
+
+	var song struct {
+		SongID string `json:"song_id"`
+		Title  string `json:"title"`
+		Artist string `json:"artist"`
+	}
+
+	err := db.QueryRow(context.Background(), "SELECT song_id, title, artist FROM songs WHERE song_id = $1", songID).
+		Scan(&song.SongID, &song.Title, &song.Artist)
+
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "error: Failed to retrieve song: " + err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"message": "Song retrieved successfully!", "song": song})
 }
 
 // Retrieves all songs from the database
