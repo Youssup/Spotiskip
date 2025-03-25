@@ -35,6 +35,9 @@ func main() {
 	// Add a new song
 	r.POST("/addSong", addSong)
 
+	// Add skipped sections to a song
+	r.POST("/addSkippedSections", addSkippedSections)
+
 	// Get all songs
 	r.GET("/getSongs", getSongs)
 
@@ -67,6 +70,49 @@ func dbConnection() {
 	}
 	db = conn
 	fmt.Println("Connected to database successfully")
+}
+
+// Add skipped sections to a song
+func addSkippedSections(c *gin.Context) {
+	var request struct {
+		SongID          string `json:"song_id"`
+		SkippedSections []struct {
+			StartTime int `json:"start_time"`
+			EndTime   int `json:"end_time"`
+		} `json:"skipped_sections"`
+	}
+
+	// Bind JSON request to struct
+	if err := c.ShouldBindJSON(&request); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request: " + err.Error()})
+		return
+	}
+
+	// Check if the song exists before inserting skipped sections
+	var exists bool
+	err := db.QueryRow(context.Background(), "SELECT EXISTS (SELECT 1 FROM songs WHERE song_id = $1)", request.SongID).Scan(&exists)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to check if song exists: " + err.Error()})
+		return
+	}
+	if !exists {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Song not found"})
+		return
+	}
+
+	// Insert each skipped section into the database
+	for _, section := range request.SkippedSections {
+		_, err := db.Exec(context.Background(),
+			"INSERT INTO skipped_sections (song_id, start_time, end_time) VALUES ($1, $2, $3)",
+			request.SongID, section.StartTime, section.EndTime)
+
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to insert skipped section: " + err.Error()})
+			return
+		}
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "Skipped sections added successfully!"})
 }
 
 // Adds a new song to the database
