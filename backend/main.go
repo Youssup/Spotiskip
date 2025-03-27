@@ -41,6 +41,9 @@ func main() {
 	// Get song by ID
 	r.GET("/getSong/:id", getSong)
 
+	// Get song with skipped sections by ID
+	r.GET("/getSongDetails/:id", getSongDetails)
+
 	// Get all songs
 	r.GET("/getSongs", getSongs)
 
@@ -80,6 +83,7 @@ func addSkippedSections(c *gin.Context) {
 	var request struct {
 		SongID          string `json:"song_id"`
 		SkippedSections []struct {
+			ID        int `json:"id"`
 			StartTime int `json:"start_time"`
 			EndTime   int `json:"end_time"`
 		} `json:"skipped_sections"`
@@ -167,6 +171,55 @@ func getSong(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"message": "Song retrieved successfully!", "song": song})
+}
+
+// Retrieves a song with its skipped sections
+func getSongDetails(c *gin.Context) {
+	songID := c.Param("id")
+
+	var song struct {
+		SongID          string `json:"song_id"`
+		Title           string `json:"title"`
+		Artist          string `json:"artist"`
+		SkippedSections []struct {
+			ID        int `json:"id"`
+			StartTime int `json:"start_time"`
+			EndTime   int `json:"end_time"`
+		} `json:"skipped_sections"`
+	}
+
+	err := db.QueryRow(context.Background(),
+		"SELECT song_id, title, artist FROM songs WHERE song_id = $1", songID).
+		Scan(&song.SongID, &song.Title, &song.Artist)
+
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "error: Song not found"})
+		return
+	}
+
+	rows, err := db.Query(context.Background(),
+		"SELECT id, start_time, end_time, created_at FROM skipped_sections WHERE song_id = $1", songID)
+
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "error: Failed to retrieve skipped sections"})
+		return
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var section struct {
+			ID        int `json:"id"`
+			StartTime int `json:"start_time"`
+			EndTime   int `json:"end_time"`
+		}
+		if err := rows.Scan(&section.ID, &section.StartTime, &section.EndTime); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "error: Failed to process skipped sections"})
+			return
+		}
+		song.SkippedSections = append(song.SkippedSections, section)
+	}
+
+	c.JSON(http.StatusOK, song)
 }
 
 // Retrieves all songs from the database
